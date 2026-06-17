@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{% if method == 'cie' %}CIE{% else %}SPID{% endif %} — Accesso E-Voting{% endblock %}
+
+{% block content %}
+<div class="idp-container">
+
+  <div class="spid-header">
+    {% if method == 'cie' %}
+      <div class="cie-badge">CIE</div>
+      <p style="margin-top:10px;font-size:.9rem;color:#555;">Carta d'Identità Elettronica — Accesso simulato</p>
+    {% else %}
+      <div class="spid-badge">SPID</div>
+      <p style="margin-top:10px;font-size:.9rem;color:#555;">Sistema Pubblico di Identità Digitale — Accesso simulato</p>
+    {% endif %}
+  </div>
+
+  <div class="alert alert-warning" style="margin-bottom:16px;">
+    <span class="alert-icon">⚠️</span>
+    <span><strong>Ambiente di test:</strong> questo è un Mock IdP che simula l'accesso SPID/CIE per scopi didattici.</span>
+  </div>
+
+  <div class="idp-card">
+    <h3 style="font-size:1rem;color:#003d82;margin-bottom:20px;font-weight:700;">
+      {% if method == 'cie' %}Inserisci il PIN della tua CIE{% else %}Accedi con le tue credenziali SPID{% endif %}
+    </h3>
+
+    <form id="loginForm" novalidate>
+      <div class="form-group">
+        <label for="spid_id">{% if method == 'cie' %}Codice Fiscale{% else %}Username SPID{% endif %}</label>
+        <input type="text" id="spid_id" name="spid_id" placeholder="es. mrossi" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label for="password">{% if method == 'cie' %}PIN CIE{% else %}Password SPID{% endif %}</label>
+        <input type="password" id="password" name="password" placeholder="Referendum2026!" autocomplete="current-password" required>
+      </div>
+
+      <p class="text-gray text-sm" style="margin:-4px 0 10px;line-height:1.45;">
+        Passo 1 di 2 — verifica dell'identità. Dopo l'accesso ti verrà richiesto
+        il numero di tessera elettorale.
+      </p>
+
+      <div id="loginAlert" style="display:none;"></div>
+
+      <button type="submit" class="btn {% if method == 'cie' %}btn-primary{% else %}btn-green{% endif %}" style="width:100%;justify-content:center;margin-top:8px;" id="submitBtn">
+        <span id="btnText">Accedi e continua</span>
+        <span id="btnSpinner" class="spinner" style="display:none;"></span>
+      </button>
+    </form>
+  </div>
+
+  <div style="text-align:center;margin-top:16px;">
+    <a href="/" class="text-sm text-gray">← Torna alla pagina principale</a>
+    &nbsp;|&nbsp;
+    {% if method == 'cie' %}
+      <a href="/auth/login?method=spid" class="text-sm">Usa SPID invece</a>
+    {% else %}
+      <a href="/auth/login?method=cie" class="text-sm">Usa CIE invece</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("loginForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const alertEl  = document.getElementById("loginAlert");
+  const btnText  = document.getElementById("btnText");
+  const spinner  = document.getElementById("btnSpinner");
+  const submitBtn = document.getElementById("submitBtn");
+
+  const spid_id  = document.getElementById("spid_id").value.trim();
+  const password = document.getElementById("password").value.trim();
+
+  if (!spid_id || !password) {
+    showAlert("Compila tutti i campi.", "error");
+    return;
+  }
+
+  setBusy(true);
+  alertEl.style.display = "none";
+
+  try {
+    const resp = await fetch("/auth/authenticate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spid_id, password }),
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+      showAlert("✅ Identità verificata. Procedi con la tessera elettorale…", "success");
+      setTimeout(() => { window.location.href = data.redirect; }, 800);
+    } else {
+      showAlert(data.error || "Autenticazione fallita.", "error");
+      setBusy(false);
+    }
+  } catch (err) {
+    showAlert("Errore di rete: " + err.message, "error");
+    setBusy(false);
+  }
+
+  function showAlert(msg, type) {
+    alertEl.innerHTML = `<div class="alert alert-${type}"><span class="alert-icon">${type==="error"?"❌":"✅"}</span><span>${msg}</span></div>`;
+    alertEl.style.display = "block";
+  }
+  function setBusy(busy) {
+    submitBtn.disabled = busy;
+    btnText.textContent  = busy ? "Verifica in corso…" : "Accedi e continua";
+    spinner.style.display = busy ? "inline-block" : "none";
+  }
+});
+</script>
+{% endblock %}

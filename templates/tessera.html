@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Tessera elettorale — Accesso E-Voting{% endblock %}
+
+{% block content %}
+<div class="idp-container">
+
+  <div class="spid-header">
+    {% if method == 'cie' %}
+      <div class="cie-badge">CIE</div>
+      <p style="margin-top:10px;font-size:.9rem;color:#555;">Carta d'Identità Elettronica — Accesso simulato</p>
+    {% else %}
+      <div class="spid-badge">SPID</div>
+      <p style="margin-top:10px;font-size:.9rem;color:#555;">Sistema Pubblico di Identità Digitale — Accesso simulato</p>
+    {% endif %}
+  </div>
+
+  <div class="alert alert-success" style="margin-bottom:16px;">
+    <span class="alert-icon">✅</span>
+    <span><strong>Identità verificata{% if nome %}: {{ nome }}{% endif %}.</strong>
+    Ora conferma il tuo diritto al voto inserendo la tessera elettorale.</span>
+  </div>
+
+  <div class="idp-card">
+    <h3 style="font-size:1rem;color:#003d82;margin-bottom:6px;font-weight:700;">
+      Passo 2 di 2 — Verifica della tessera elettorale
+    </h3>
+    <p class="text-gray text-sm" style="margin-bottom:20px;line-height:1.45;">
+      L'Identity Provider verifica che la tessera sia valida e corrisponda all'identità appena autenticata.
+    </p>
+
+    <form id="tesseraForm" novalidate>
+      <div class="form-group">
+        <label for="tessera">Numero Tessera Elettorale</label>
+        <input type="text" id="tessera" name="tessera" placeholder="es. AB1234567" autocomplete="off" required>
+        <div class="form-hint">Inserisci il numero riportato sulla tua tessera elettorale cartacea.</div>
+      </div>
+
+      <div id="tesseraAlert" style="display:none;"></div>
+
+      <button type="submit" class="btn {% if method == 'cie' %}btn-primary{% else %}btn-green{% endif %}" style="width:100%;justify-content:center;margin-top:8px;" id="submitBtn">
+        <span id="btnText">Verifica e procedi al voto</span>
+        <span id="btnSpinner" class="spinner" style="display:none;"></span>
+      </button>
+    </form>
+  </div>
+
+  <div style="text-align:center;margin-top:16px;">
+    <a href="/" class="text-sm text-gray">← Annulla e torna alla pagina principale</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("tesseraForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const alertEl   = document.getElementById("tesseraAlert");
+  const btnText   = document.getElementById("btnText");
+  const spinner   = document.getElementById("btnSpinner");
+  const submitBtn = document.getElementById("submitBtn");
+
+  const tessera = document.getElementById("tessera").value.trim();
+  if (!tessera) {
+    showAlert("Inserisci il numero di tessera elettorale.", "error");
+    return;
+  }
+
+  setBusy(true);
+  alertEl.style.display = "none";
+
+  try {
+    const resp = await fetch("/auth/verify-tessera", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tessera }),
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+      showAlert("✅ Tessera verificata. Reindirizzamento alla scheda di voto…", "success");
+      setTimeout(() => { window.location.href = data.redirect; }, 800);
+    } else {
+      showAlert(data.error || "Verifica fallita.", "error");
+      setBusy(false);
+    }
+  } catch (err) {
+    showAlert("Errore di rete: " + err.message, "error");
+    setBusy(false);
+  }
+
+  function showAlert(msg, type) {
+    alertEl.innerHTML = `<div class="alert alert-${type}"><span class="alert-icon">${type==="error"?"❌":"✅"}</span><span>${msg}</span></div>`;
+    alertEl.style.display = "block";
+  }
+  function setBusy(busy) {
+    submitBtn.disabled = busy;
+    btnText.textContent  = busy ? "Verifica in corso…" : "Verifica e procedi al voto";
+    spinner.style.display = busy ? "inline-block" : "none";
+  }
+});
+</script>
+{% endblock %}

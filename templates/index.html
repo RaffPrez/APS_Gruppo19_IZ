@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ election.name }} — E-Voting Italia{% endblock %}
+
+{% block content %}
+<div style="max-width:720px;margin:0 auto;">
+
+  <div class="card" style="border-top:4px solid #003d82;text-align:center;padding:40px 32px;">
+    <div style="margin-bottom:12px;">
+      {% if scrutiny_done %}
+        <span class="tag tag-closed">✅ Scrutinio concluso — risultati pubblicati</span>
+      {% else %}
+        <span class="tag tag-open">⚡ Votazione in corso</span>
+      {% endif %}
+    </div>
+    <h2 style="font-size:1.6rem;color:#003d82;margin-bottom:14px;">{{ election.name }}</h2>
+    <p style="font-size:1.05rem;line-height:1.6;color:#333;max-width:580px;margin:0 auto 8px;">
+      {{ election.question }}
+    </p>
+  </div>
+
+  <div class="card" style="border-top:4px solid #008758;">
+    <div class="card-title">Accedi per votare</div>
+    <p class="card-subtitle">Scegli il metodo di autenticazione con cui sei registrato al sistema.</p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <a href="/auth/login?method=spid" class="btn btn-green btn-lg" style="flex:1;min-width:180px;justify-content:center;">
+        <span style="background:#fff;color:#008758;font-weight:900;font-size:.9rem;padding:2px 8px;border-radius:3px;letter-spacing:1px;">SPID</span>
+        Entra con SPID
+      </a>
+      <a href="/auth/login?method=cie" class="btn btn-primary btn-lg" style="flex:1;min-width:180px;justify-content:center;">
+        <span style="background:#fff;color:#003d82;font-weight:900;font-size:.9rem;padding:2px 8px;border-radius:3px;letter-spacing:1px;">CIE</span>
+        Entra con CIE
+      </a>
+    </div>
+    <p class="text-gray text-sm mt-16" style="line-height:1.5;">
+      <strong>Credenziali di test:</strong> spid_id = <code>mrossi</code>, <code>lbianchi</code>, … &nbsp;|&nbsp;
+      password = <code>Referendum2026!</code> &nbsp;|&nbsp; tessera = <code>AB1234567</code>
+    </p>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    {% if scrutiny_done %}
+      <a href="/bulletin-board" class="btn btn-outline btn-sm">📋 Bulletin Board pubblica</a>
+      <a href="/verify" class="btn btn-outline btn-sm">🔍 Verifica il tuo voto</a>
+    {% else %}
+      <span class="btn btn-outline btn-sm" style="opacity:.5;cursor:not-allowed;" title="Disponibile al termine dello scrutinio">📋 Bulletin Board (dopo lo scrutinio)</span>
+      <span class="btn btn-outline btn-sm" style="opacity:.5;cursor:not-allowed;" title="Disponibile al termine dello scrutinio">🔍 Verifica voto (dopo lo scrutinio)</span>
+    {% endif %}
+    <a href="/pki/ae-pubkey" class="btn btn-outline btn-sm" target="_blank">🔑 Chiave pubblica AE</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Pannello Scrutinio — E-Voting Italia{% endblock %}
+
+{% block content %}
+<div style="max-width:760px;margin:0 auto;">
+
+  <div class="alert alert-warning" style="margin-bottom:20px;">
+    <span class="alert-icon">⚠️</span>
+    <span><strong>Pannello riservato alla Commissione Elettorale.</strong> La procedura di scrutinio richiede la presenza di almeno {{ threshold.t }} dei {{ threshold.n }} commissari con i propri frammenti crittografici.</span>
+  </div>
+
+  <div class="card card-sm" style="margin-bottom:20px;display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
+    <div>
+      <div style="font-size:2rem;font-weight:700;color:#003d82;">{{ ballot_count }}</div>
+      <div class="text-gray text-sm">schede nell'urna</div>
+    </div>
+    <div style="flex:1;">
+      {% if results.status == 'computed' %}
+        <span class="tag tag-open">✅ Scrutinio completato</span>
+        <div class="text-sm text-gray mt-8">Risultati già pubblicati nella Bulletin Board.</div>
+      {% else %}
+        <span class="tag tag-closed">⏳ Scrutinio non ancora avviato</span>
+        <div class="text-sm text-gray mt-8">In attesa della ricostruzione della chiave AE.</div>
+      {% endif %}
+    </div>
+    <div>
+      <button onclick="if(confirm('Azzerare l\'urna per nuovi test?')) resetUrna()" class="btn btn-red btn-sm">🔄 Reset urna (test)</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔐 Ricostruzione chiave AE — Schema a soglia ({{ threshold.t }}, {{ threshold.n }})</div>
+    <p class="card-subtitle">
+      La chiave privata dell'Autorità Elettorale è stata divisa in <strong>{{ threshold.n }} frammenti</strong>
+      distribuiti ai commissari. Sono necessari almeno <strong>{{ threshold.t }}</strong> per ricostruirla e avviare lo scrutinio.
+    </p>
+
+    <div id="sharesContainer">
+      {% for share in threshold.shares %}
+      <div class="share-input" id="shareRow{{ share.share_id }}">
+        <div class="form-group" style="min-width:160px;flex:0 0 auto;">
+          <label>Commissario</label>
+          <input type="text" value="{{ share.commissioner }}" readonly
+                 style="background:#f5f7fa;color:#555;font-size:.85rem;">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>Frammento (valore hex)</label>
+          <input type="text" id="shareVal{{ share.share_id }}"
+                 placeholder="Incolla il frammento hex del commissario…"
+                 style="font-family:monospace;font-size:.75rem;"
+                 autocomplete="off">
+        </div>
+        <button onclick="autofillShare({{ share.share_id }}, '{{ share.share_value }}')"
+                class="btn btn-outline btn-sm" style="flex-shrink:0;align-self:flex-end;margin-bottom:18px;"
+                title="Simula inserimento frammento">
+          📋 Demo
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div id="scrutinyAlert" style="display:none;margin-bottom:12px;"></div>
+
+    <button id="decryptBtn" onclick="startScrutiny()" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">
+      <span id="decryptBtnText">🔓 Avvia scrutinio e decifra le schede</span>
+      <span id="decryptSpinner" class="spinner" style="display:none;"></span>
+    </button>
+
+    <p class="text-gray text-sm text-center mt-8">
+      Nel prototipo puoi usare il pulsante "📋 Demo" per autofill dei frammenti precaricati dal setup.
+    </p>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:{% if results.status == 'computed' %}block{% else %}none{% endif %};border-top:4px solid #008758;">
+    <div class="card-title" style="color:#008758;">📊 Risultati del referendum</div>
+
+    {% if results.status == 'computed' %}
+    <p class="text-sm text-gray mb-8">Totale schede: <strong>{{ results.total_ballots }}</strong> — Scrutinio il {{ results.timestamp }}</p>
+
+    {% for opt in ['SI','NO','BIANCA'] %}
+    {% if opt in results.counts %}
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;font-size:.9rem;font-weight:600;margin-bottom:4px;">
+        <span>{% if opt=='SI' %}✅ Sì{% elif opt=='NO' %}❌ No{% else %}⬜ Scheda Bianca{% endif %}</span>
+        <span>{{ results.counts[opt] }} voti ({{ results.percentages[opt] }}%)</span>
+      </div>
+      <div class="result-bar result-bar-{{ opt|lower }}">
+        <div class="result-bar-fill" style="width:{{ results.percentages[opt] }}%;">
+          {% if results.percentages[opt] > 5 %}{{ results.percentages[opt] }}%{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <div id="liveResults"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function autofillShare(shareId, shareValue) {
+  document.getElementById("shareVal" + shareId).value = shareValue;
+}
+
+async function startScrutiny() {
+  const btn     = document.getElementById("decryptBtn");
+  const btnText = document.getElementById("decryptBtnText");
+  const spinner = document.getElementById("decryptSpinner");
+  const alertEl = document.getElementById("scrutinyAlert");
+
+  const shares = [];
+  document.querySelectorAll("[id^='shareVal']").forEach(input => {
+    const val = input.value.trim();
+    if (val) {
+      const shareId = parseInt(input.id.replace("shareVal", ""));
+      shares.push({ x: shareId, y: val });
+    }
+  });
+
+  if (shares.length < {{ threshold.t }}) {
+    showAlert(`Necessari almeno {{ threshold.t }} frammenti (inseriti: ${shares.length}).`, "error");
+    return;
+  }
+
+  btn.disabled = true;
+  btnText.textContent = "Ricostruzione chiave e decifratura in corso…";
+  spinner.style.display = "inline-block";
+  alertEl.style.display = "none";
+
+  try {
+    const resp = await fetch("/admin/decrypt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shares }),
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+      const r = data.results;
+      showAlert(`Scrutinio completato — ${r.total_ballots} schede decifrate e conteggiate.`, "success");
+
+      const card = document.getElementById("resultsCard");
+      const live = document.getElementById("liveResults");
+      card.style.display = "block";
+
+      const colors = { SI: "#008758", NO: "#d73a49", BIANCA: "#c89800" };
+      const icons  = { SI: "✅ Sì", NO: "❌ No", BIANCA: "⬜ Scheda Bianca" };
+      let html = `<p class="text-sm text-gray mb-8">Totale schede: <strong>${r.total_ballots}</strong></p>`;
+
+      for (const [opt, count] of Object.entries(r.counts)) {
+        const pct = r.percentages[opt] || 0;
+        html += `
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;font-size:.9rem;font-weight:600;margin-bottom:4px;">
+              <span>${icons[opt] || opt}</span>
+              <span>${count} voti (${pct}%)</span>
+            </div>
+            <div class="result-bar result-bar-${opt.toLowerCase()}">
+              <div class="result-bar-fill" style="width:${pct}%;">${pct > 5 ? pct + "%" : ""}</div>
+            </div>
+          </div>`;
+      }
+      live.innerHTML = html;
+      if (r.errors && r.errors.length > 0) {
+        live.innerHTML += `<div class="alert alert-warning mt-16"><span class="alert-icon">⚠️</span><span>${r.errors.length} schede non decifrate: ${r.errors.join(", ")}</span></div>`;
+      }
+    } else {
+      showAlert(data.error || "Errore durante lo scrutinio.", "error");
+    }
+  } catch (e) {
+    showAlert("Errore di rete: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = "🔓 Avvia scrutinio e decifra le schede";
+    spinner.style.display = "none";
+  }
+
+  function showAlert(msg, type) {
+    alertEl.innerHTML = `<div class="alert alert-${type}"><span class="alert-icon">${type === "error" ? "❌" : "✅"}</span><span>${msg}</span></div>`;
+    alertEl.style.display = "block";
+  }
+}
+
+async function resetUrna() {
+  await fetch("/admin/reset", { method: "POST", headers: { "Content-Type": "application/json" } });
+  window.location.reload();
+}
+</script>
+{% endblock %}

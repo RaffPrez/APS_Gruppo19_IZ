@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Verifica voto — E-Voting Italia{% endblock %}
+
+{% block content %}
+<div style="max-width:600px;margin:0 auto;">
+
+{% if locked %}
+  <div class="card" style="border-top:4px solid #003d82;text-align:center;padding:40px 32px;">
+    <div style="font-size:2.4rem;margin-bottom:10px;">🔒</div>
+    <div class="card-title" style="justify-content:center;">Verifica non ancora disponibile</div>
+    <p class="card-subtitle" style="max-width:520px;margin:8px auto 0;line-height:1.55;">
+      La verifica individuale del voto sarà attiva <strong>al termine dello scrutinio</strong>.
+      Durante le votazioni la Bulletin Board resta riservata: conserva il tuo
+      <strong>Tracking Code</strong> e ripresentati a urne chiuse per controllare che la tua
+      scheda sia stata inclusa nel conteggio.
+    </p>
+    <div style="margin-top:18px;"><a href="/" class="btn btn-primary btn-sm">🏠 Torna alla Home</a></div>
+  </div>
+{% else %}
+  <div class="card" style="border-top:4px solid #003d82;">
+    <div class="card-title">🔍 Verificabilità Individuale</div>
+    <p class="card-subtitle">
+      Inserisci il Tracking Code che hai ricevuto dopo il voto per verificare che la tua scheda
+      sia presente nella Bulletin Board immutabile.
+    </p>
+
+    <div class="form-group">
+      <label for="trackingInput">Tracking Code</label>
+      <input type="text" id="trackingInput" placeholder="Incolla il codice hex a 64 caratteri…"
+             style="font-family:monospace;font-size:.85rem;" autocomplete="off">
+    </div>
+
+    <button onclick="verifyCode()" class="btn btn-primary" style="width:100%;justify-content:center;" id="verifyBtn">
+      <span id="verifyBtnText">Verifica presenza nella Bulletin Board</span>
+      <span id="verifySpinner" class="spinner" style="display:none;"></span>
+    </button>
+
+    <div id="verifyResult" style="display:none;margin-top:16px;"></div>
+  </div>
+
+  <div class="card card-sm" style="background:#f0f5ff;border:1px solid #b3c9f5;">
+    <strong style="color:#003d82;">Verificabilità Universale</strong>
+    <p class="text-sm" style="margin-top:8px;line-height:1.5;color:#333;">
+      Qualsiasi revisore esterno può scaricare la Bulletin Board, ricalcolare la hash chain e
+      verificare le firme digitali dei token emessi dall'IdP — senza necessità di fidarsi del server.
+    </p>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+      <a href="/bulletin-board" class="btn btn-outline btn-sm">📋 Vedi Bulletin Board</a>
+      <a href="/pki/idp-pubkey" class="btn btn-outline btn-sm" target="_blank">🔑 Chiave pubblica IdP</a>
+    </div>
+  </div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function verifyCode() {
+  const code     = document.getElementById("trackingInput").value.trim().toLowerCase();
+  const resultEl = document.getElementById("verifyResult");
+  const btn      = document.getElementById("verifyBtn");
+  const btnText  = document.getElementById("verifyBtnText");
+  const spinner  = document.getElementById("verifySpinner");
+
+  if (!code || code.length !== 64 || !/^[0-9a-f]+$/.test(code)) {
+    resultEl.innerHTML = `<div class="alert alert-error"><span class="alert-icon">❌</span><span>Il Tracking Code deve essere una stringa esadecimale di 64 caratteri.</span></div>`;
+    resultEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btnText.textContent = "Ricerca in corso…";
+  spinner.style.display = "inline-block";
+  resultEl.style.display = "none";
+
+  try {
+    const resp = await fetch(`/verify/check?code=${encodeURIComponent(code)}`);
+    const data = await resp.json();
+
+    if (data.found) {
+      const ts = new Date(data.timestamp * 1000).toLocaleString("it-IT");
+      resultEl.innerHTML = `
+        <div class="alert alert-success">
+          <span class="alert-icon">✅</span>
+          <div>
+            <strong>Scheda trovata nella Bulletin Board</strong><br>
+            Blocco <strong>#${data.block_index}</strong> — registrato il ${ts}<br>
+            <span class="mono" style="font-size:.78rem;color:#444;margin-top:4px;display:block;">
+              Hash blocco: ${data.block_hash}
+            </span>
+          </div>
+        </div>`;
+    } else {
+      resultEl.innerHTML = `
+        <div class="alert alert-error">
+          <span class="alert-icon">❌</span>
+          <span>Codice non trovato nella Bulletin Board. Verifica di aver copiato correttamente il Tracking Code.</span>
+        </div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="alert alert-error"><span class="alert-icon">❌</span><span>Errore di rete: ${e.message}</span></div>`;
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = "Verifica presenza nella Bulletin Board";
+    spinner.style.display = "none";
+  }
+
+  resultEl.style.display = "block";
+}
+
+document.getElementById("trackingInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") verifyCode();
+});
+</script>
+{% endblock %}

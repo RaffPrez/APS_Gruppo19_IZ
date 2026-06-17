@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Esprimi il voto — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div style="max-width:700px;margin:0 auto;">
+
+  <div class="card card-sm" id="walletStatus">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="statusIcon" style="font-size:1.4rem;">⏳</span>
+      <div>
+        <div style="font-weight:700;font-size:.95rem;" id="statusTitle">Inizializzazione Wallet crittografico…</div>
+        <div class="text-gray text-sm" id="statusDesc">Generazione chiavi effimere RSA-2048 e richiesta token all'IdP</div>
+      </div>
+    </div>
+    <div id="progressSteps" style="margin-top:14px;display:none;">
+      <div class="text-sm" style="font-family:monospace;color:#555;line-height:1.7;" id="logLines"></div>
+    </div>
+  </div>
+
+  <div class="card" id="voteCard" style="display:none;">
+    <div class="card-title">{{ election.name }}</div>
+    <p style="font-size:1rem;line-height:1.55;color:#333;margin-bottom:6px;">{{ election.question }}</p>
+    <p class="text-gray text-sm mb-8">Seleziona una delle tre opzioni, poi conferma il voto.</p>
+
+    <div class="vote-options" id="voteOptions">
+      <label class="vote-option si" data-value="SI">
+        <input type="radio" name="vote" value="SI">
+        <div class="opt-icon">✅</div>
+        <div class="opt-label">Sì</div>
+        <div class="opt-desc">A favore della proposta</div>
+        <span class="check-mark">✓</span>
+      </label>
+      <label class="vote-option no" data-value="NO">
+        <input type="radio" name="vote" value="NO">
+        <div class="opt-icon">❌</div>
+        <div class="opt-label">No</div>
+        <div class="opt-desc">Contro la proposta</div>
+        <span class="check-mark">✓</span>
+      </label>
+      <label class="vote-option bianca" data-value="BIANCA">
+        <input type="radio" name="vote" value="BIANCA">
+        <div class="opt-icon">⬜</div>
+        <div class="opt-label">Scheda Bianca</div>
+        <div class="opt-desc">Voto di astensione</div>
+        <span class="check-mark">✓</span>
+      </label>
+    </div>
+
+    <div id="voteAlert" style="display:none;margin-bottom:12px;"></div>
+
+    <button id="castBtn" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;" disabled>
+      <span id="castBtnText">Seleziona un'opzione per continuare</span>
+      <span id="castSpinner" class="spinner" style="display:none;"></span>
+    </button>
+
+    <p class="text-gray text-sm text-center mt-8">
+      Il voto è irrevocabile. Potrai verificare il tuo Tracking Code al termine dello scrutinio.
+    </p>
+  </div>
+
+  <div class="card" id="receiptCard" style="display:none;border-top:4px solid #008758;">
+    <div style="text-align:center;padding:16px 0 8px;">
+      <div style="font-size:3rem;margin-bottom:8px;">🎉</div>
+      <div class="card-title" style="color:#008758;">Voto depositato con successo</div>
+      <p class="card-subtitle">La tua scheda è stata registrata nell'urna digitale pubblica.</p>
+    </div>
+
+    <div style="background:#f0f9f4;border:1.5px solid #a3d9b8;border-radius:8px;padding:20px;margin:16px 0;">
+      <div class="text-sm" style="color:#1a5c3a;font-weight:700;margin-bottom:8px;">🔑 Il tuo Tracking Code (conservalo):</div>
+      <div id="trackingCodeDisplay" class="mono" style="color:#003d82;font-size:.85rem;word-break:break-all;padding:10px;background:#fff;border-radius:4px;border:1px solid #c8e6d0;"></div>
+      <p class="text-sm" style="color:#555;margin-top:10px;line-height:1.5;">
+        Questo codice al termine dello scrutinio permetterà di verificare che la tua scheda sia presente nella Bulletin Board.
+      </p>
+    </div>
+
+    <div class="text-sm text-gray" style="line-height:1.6;margin-bottom:16px;">
+      <strong>Block #<span id="blockIndex"></span></strong> — Hash blocco: <span id="blockHash" class="mono" style="font-size:.78rem;"></span>
+    </div>
+
+    <div class="alert alert-info" style="margin-bottom:16px;">
+      <span class="alert-icon">⏳</span>
+      <span>La <strong>Bulletin Board</strong> e la <strong>verifica individuale</strong> del Tracking Code
+      saranno disponibili <strong>al termine dello scrutinio</strong>. Conserva il codice fino ad allora.</span>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="/" class="btn btn-outline">🏠 Torna alla Home</a>
+    </div>
+  </div>
+
+  <div class="card" id="errorCard" style="display:none;border-top:4px solid #d73a49;">
+    <div style="font-size:2rem;margin-bottom:8px;">⚠️</div>
+    <div class="card-title" style="color:#d73a49;">Sessione non valida</div>
+    <p class="card-subtitle" id="errorMsg"></p>
+    <a href="/" class="btn btn-primary">Ricomincia dall'inizio</a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/wallet.js') }}"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+
+  function log(msg) {
+    const el = $("logLines");
+    el.innerHTML += `<span style="color:#6b7280;">[wallet]</span> ${msg}<br>`;
+    $("progressSteps").style.display = "block";
+  }
+
+  function setStatus(icon, title, desc) {
+    $("statusIcon").textContent = icon;
+    $("statusTitle").textContent = title;
+    $("statusDesc").textContent = desc;
+  }
+
+  function showFatalError(msg) {
+    $("walletStatus").style.display = "none";
+    $("errorMsg").textContent = msg;
+    $("errorCard").style.display = "block";
+  }
+
+  const tessera = {{ tessera | tojson }};
+
+  setStatus("⏳", "Inizializzazione Wallet…", "Generazione chiavi effimere RSA-2048 in corso");
+  log("Generazione coppia di chiavi effimere RSA-PSS 2048-bit...");
+
+  try {
+    await Wallet.getAuthorizationToken(tessera);
+    log("✓ Chiave pubblica effimera inviata all'IdP");
+    log("✓ Token di Autorizzazione ricevuto (firmato con RSA-PSS)");
+    log("✓ Sessione IdP chiusa — separazione logica dei domini completata");
+    log("✓ Chiave pubblica AE (RSA-OAEP) ricevuta e importata");
+
+    setStatus("✅", "Wallet inizializzato — puoi votare", "Il token di autorizzazione è pronto. Seleziona la tua preferenza.");
+    $("voteCard").style.display = "block";
+  } catch (err) {
+    showFatalError("Impossibile ottenere l'autorizzazione dall'IdP: " + err.message);
+    return;
+  }
+
+  let selectedVote = null;
+  document.querySelectorAll(".vote-option").forEach(opt => {
+    opt.addEventListener("click", () => {
+      document.querySelectorAll(".vote-option").forEach(o => o.classList.remove("selected"));
+      opt.classList.add("selected");
+      opt.querySelector("input[type=radio]").checked = true;
+      selectedVote = opt.dataset.value;
+      $("castBtn").disabled = false;
+      $("castBtnText").textContent = `Conferma voto: "${opt.querySelector(".opt-label").textContent}"`;
+    });
+  });
+
+  $("castBtn").addEventListener("click", async () => {
+    if (!selectedVote) return;
+
+    const castBtn = $("castBtn");
+    castBtn.disabled = true;
+    $("castBtnText").textContent = "Cifratura e deposito in corso…";
+    $("castSpinner").style.display = "inline-block";
+    $("voteAlert").style.display = "none";
+
+    log(`Voto selezionato: "${selectedVote}" — avvio operazioni crittografiche...`);
+    log("Cifratura RSA-OAEP con chiave pubblica AE...");
+
+    try {
+      const result = await Wallet.castVote(selectedVote);
+
+      log("✓ Tracking code calcolato: SHA-256(crittogramma)");
+      log("✓ Scheda firmata con chiave effimera (RSA-PSS, Proof of Possession)");
+      log("✓ Scheda depositata nell'urna — AE ha verificato: firma IdP, firma effimera, unicità tessera");
+      log("✓ Chiavi effimere eliminate dalla memoria");
+
+      $("voteCard").style.display = "none";
+      $("trackingCodeDisplay").textContent = result.tracking_code;
+      $("blockIndex").textContent = result.block_index;
+      $("blockHash").textContent = result.block_hash;
+      $("receiptCard").style.display = "block";
+      setStatus("🎉", "Voto registrato con successo", "Conserva il Tracking Code per la verifica individuale.");
+
+    } catch (err) {
+      $("voteAlert").innerHTML = `<div class="alert alert-error"><span class="alert-icon">❌</span><span>${err.message}</span></div>`;
+      $("voteAlert").style.display = "block";
+      castBtn.disabled = false;
+      $("castBtnText").textContent = "Riprova";
+      $("castSpinner").style.display = "none";
+    }
+  });
+})();
+</script>
+{% endblock %}

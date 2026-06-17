@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Bulletin Board pubblica — E-Voting Italia{% endblock %}
+
+{% block content %}
+<div style="max-width:800px;margin:0 auto;">
+
+{% if locked %}
+  <div class="card" style="border-top:4px solid #003d82;text-align:center;padding:40px 32px;">
+    <div style="font-size:2.4rem;margin-bottom:10px;">🔒</div>
+    <div class="card-title" style="justify-content:center;">Bulletin Board riservata</div>
+    <p class="card-subtitle" style="max-width:540px;margin:8px auto 0;line-height:1.55;">
+      Il registro pubblico delle schede e i risultati saranno consultabili
+      <strong>soltanto al termine dello scrutinio</strong>.
+    </p>
+    <p class="text-gray text-sm mt-16">Conserva il tuo Tracking Code: potrai verificarlo a scrutinio concluso.</p>
+    <div style="margin-top:18px;"><a href="/" class="btn btn-primary btn-sm">🏠 Torna alla Home</a></div>
+  </div>
+{% else %}
+  <div class="card card-sm" style="border-left:4px solid #003d82;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div class="card-title" style="margin-bottom:4px;">📋 Bulletin Board — Registro Immutabile</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:1.5rem;font-weight:700;color:#003d82;">{{ blocks|length }}</div>
+        <div class="text-gray text-sm">schede registrate</div>
+      </div>
+    </div>
+  </div>
+
+  {% if results.status == 'computed' %}
+
+  <div class="card" style="border-top:4px solid #008758;">
+    <div class="card-title" style="color:#008758;">✅ Scrutinio completato</div>
+    <p class="text-gray text-sm mb-8">Totale schede decifrate: <strong>{{ results.total_ballots }}</strong></p>
+
+    {% for opt, count in results.counts.items() %}
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:.9rem;font-weight:600;margin-bottom:4px;">
+        <span>{% if opt == 'SI' %}✅ Sì{% elif opt == 'NO' %}❌ No{% else %}⬜ Scheda Bianca{% endif %}</span>
+        <span>{{ count }} voti ({{ results.percentages[opt] }}%)</span>
+      </div>
+      <div class="result-bar result-bar-{{ opt|lower }}">
+        <div class="result-bar-fill" style="width:{{ results.percentages[opt] }}%;">
+          {% if results.percentages[opt] > 8 %}{{ results.percentages[opt] }}%{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="card card-sm" style="margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <strong>Verifica integrità hash chain</strong>
+        <div class="text-gray text-sm">Controlla che nessun blocco sia stato alterato.</div>
+      </div>
+      <button onclick="verifyChain()" class="btn btn-outline btn-sm">🔍 Verifica ora</button>
+    </div>
+    <div id="chainResult" style="display:none;margin-top:12px;"></div>
+  </div>
+
+  {% if blocks %}
+    {% for block in blocks|reverse %}
+    <div class="bb-block">
+      <div class="block-header">
+        <span class="block-index">Blocco #{{ block.block_index }}</span>
+        <span class="block-time">🕐 {{ block.timestamp | int | strftime }}</span>
+      </div>
+      <div class="text-sm" style="margin-bottom:4px;">
+        <strong>Tracking Code:</strong>
+        <div class="bb-tc">{{ block.tracking_code }}</div>
+      </div>
+      <div class="text-sm mt-8">
+        <strong>Hash blocco:</strong>
+        <div class="bb-hash">{{ block.block_hash }}</div>
+      </div>
+      <div class="text-sm mt-8">
+        <strong>Hash precedente:</strong>
+        <div class="bb-hash" style="color:#888;">{{ block.prev_hash }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="alert alert-info">
+      <span class="alert-icon">ℹ️</span>
+      <span>L'urna è ancora vuota. Non sono stati registrati voti.</span>
+    </div>
+  {% endif %}
+
+  <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+    <a href="/verify" class="btn btn-outline btn-sm">🔍 Verifica il tuo voto</a>
+    <a href="/pki/ae-pubkey" class="btn btn-outline btn-sm" target="_blank">🔑 Chiave pubblica AE</a>
+    <a href="/pki/idp-pubkey" class="btn btn-outline btn-sm" target="_blank">🔑 Chiave pubblica IdP</a>
+  </div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function verifyChain() {
+  const resultEl = document.getElementById("chainResult");
+  resultEl.innerHTML = '<div class="alert alert-info"><span class="alert-icon">⏳</span><span>Verifica in corso…</span></div>';
+  resultEl.style.display = "block";
+
+  try {
+    const resp = await fetch("/bulletin-board/verify-chain");
+    const data = await resp.json();
+    if (data.valid) {
+      resultEl.innerHTML = `<div class="alert alert-success"><span class="alert-icon">✅</span><span>Hash chain integra — ${data.blocks} blocchi verificati correttamente. Nessuna manomissione rilevata.</span></div>`;
+    } else {
+      resultEl.innerHTML = `<div class="alert alert-error"><span class="alert-icon">❌</span><span>ATTENZIONE: hash chain corrotta al blocco #${data.corrupted_at}. Il registro potrebbe essere stato manomesso.</span></div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="alert alert-error"><span class="alert-icon">❌</span><span>Errore di rete: ${e.message}</span></div>`;
+  }
+}
+</script>
+{% endblock %}
