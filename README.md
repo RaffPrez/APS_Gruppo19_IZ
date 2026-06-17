@@ -1,6 +1,6 @@
 # Sistema di e-voting referendario - Prototipo didattico Gruppo_19_IZ
 
-Questo repository contiene un prototipo di sistema di voto elettronico (E-Voting) sviluppato per l'insegnamento di **Algoritmi e Protocolli per la Sicurezza (A.A. 2025/2026)**. Il sistema implementa un protocollo sicuro basato sulla separazione dei domini tra Identity Provider (IdP) e Autorità Elettorale (AE), l'uso di chiavi effimere e un registro pubblico immutabile strutturato come una catena di hash. La chiave privata dell'AE è protetta tramite uno schema di condivisione del segreto a soglia (t=3, n=5).
+Questo repository contiene un prototipo di sistema di voto elettronico sviluppato per l'insegnamento di **Algoritmi e Protocolli per la Sicurezza (A.A. 2025/2026)**. Il sistema implementa un protocollo sicuro basato sulla separazione dei domini tra Identity Provider (IdP) e Autorità Elettorale (AE), l'uso di chiavi effimere e un registro pubblico immutabile strutturato come una catena di hash. La chiave privata dell'AE è protetta tramite uno schema di condivisione del segreto a soglia (t=3, n=5).
 
 ## Prerequisiti
 Prima di iniziare, assicurati di avere installato sul tuo sistema:
@@ -8,7 +8,7 @@ Prima di iniziare, assicurati di avere installato sul tuo sistema:
 * Il gestore di pacchetti `pip`
 
 ## 1. Installazione delle dipendenze
-Il progetto utilizza i framework **Flask** per la gestione del server web e delle API, e **Cryptography** per l'intera suite di operazioni crittografiche (RSA-OAEP, RSA-PSS, AES-256-GCM, Scrypt, Shamir's Secret Sharing).
+Il progetto utilizza i framework **Flask** per la gestione del server web e delle API, e **Cryptography** per l'intera suite di operazioni crittografiche.
 
 Installa i pacchetti richiesti eseguendo il seguente comando nel terminale:
 
